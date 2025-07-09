@@ -1,17 +1,34 @@
+/// Markdown block parser and renderer.
+/// Provides functions to parse Markdown text into block elements and render them as HTML.
+/// Delegates inline parsing to `wenk/inline_parser`.
+///
+/// Example:
+/// ```gleam
+/// import wenk
+/// let blocks = wenk.parse("# Hello, *world*!\\nThis is **Markdown**.")
+/// let html = wenk.render(blocks)
+/// ```
 import gleam/int
 import gleam/list
 import gleam/order.{Eq, Gt, Lt}
 import gleam/string
 import wenk/inline_parser
 
+/// Represents a block-level Markdown element.
 pub type Block {
+  /// A paragraph of text.
   Paragraph(List(inline_parser.Inline))
+  /// A heading with a specific level and inline content.
   Heading(Int, List(inline_parser.Inline))
+  /// An unordered list item.
   ListItem(List(inline_parser.Inline))
+  /// An ordered list item.
   OrderedListItem(List(inline_parser.Inline))
+  /// A fenced code block.
   CodeBlock(String)
 }
 
+/// Parse a Markdown string into a list of block elements.
 pub fn parse(text: String) -> List(Block) {
   let lines = string.split(text, "\n")
   parse_blocks_recursive(lines, [], Normal)
@@ -79,6 +96,7 @@ type ParseState {
   InCodeBlock(List(String))
 }
 
+/// Render a list of block elements as an HTML string.
 pub fn render(blocks: List(Block)) -> String {
   render_blocks_recursive(blocks, [], NotInOrderedList)
   |> string.join("")
@@ -144,6 +162,7 @@ pub fn render_inline(inline: inline_parser.Inline) -> String {
   }
 }
 
+/// Render a single block as HTML.
 pub fn render_block(block: Block) -> String {
   case block {
     Paragraph(inlines) ->
@@ -164,6 +183,7 @@ pub fn render_block(block: Block) -> String {
   }
 }
 
+/// Render a single inline element as HTML.
 pub fn parse_line(line: String) -> Block {
   case string.starts_with(line, "#") {
     True -> {

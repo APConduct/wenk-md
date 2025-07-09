@@ -1,12 +1,19 @@
+/// Markdown inline parser.
+/// Parses inline elements (bold, italic, text) from a string.
+/// Used internally by the main Markdown parser.
 import gleam/int
 import gleam/list
 import gleam/option
 import gleam/order.{Eq, Gt}
 import gleam/string
 
+/// Represents an inline Markdown element.
 pub type Inline {
+  /// Plain text.
   Text(String)
+  /// Bold text.
   Bold(List(Inline))
+  /// Italic text.
   Italic(List(Inline))
 }
 
@@ -77,6 +84,7 @@ fn delimiter_length(delimiter_type: DelimiterType) -> Int {
   }
 }
 
+/// Parse a string into a list of inline elements (text, bold, italic).
 pub fn parse_inlines(text: String) -> List(Inline) {
   let #(inlines, _) = parse_inlines_recursive(text, option.None)
   inlines
