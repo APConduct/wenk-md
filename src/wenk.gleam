@@ -1,5 +1,4 @@
 import gleam/int
-import gleam/io
 import gleam/list
 import gleam/option
 import gleam/order.{Eq, Gt, Lt}
@@ -264,42 +263,90 @@ fn parse_inlines_recursive(
       let after_delimiter_text =
         string.slice(text, index + delimiter_len, string.length(text))
 
-      // If we're inside a delimiter, check if this is a closing delimiter at the start
       case current_delimiter {
-        option.Some(inner) if inner == delimiter_type && index == 0 -> {
-          // Found closing delimiter for current context
-          #([], after_delimiter_text)
+        option.Some(inner) -> {
+          case inner == delimiter_type {
+            True -> {
+              case index == 0 {
+                True ->
+                  // Found closing delimiter for current context, return inlines up to here
+                  #([], after_delimiter_text)
+                False -> {
+                  // Same delimiter, but not at start: treat up to delimiter as plain text, then continue parsing from the delimiter (not skipping it)
+                  let before = string.slice(text, 0, index)
+                  let after = string.slice(text, index, string.length(text))
+                  let parsed_before = case string.length(before) > 0 {
+                    True -> [Text(before)]
+                    False -> []
+                  }
+                  let #(rest_inlines, final_remaining_text) =
+                    parse_inlines_recursive(after, current_delimiter)
+                  #(
+                    list.append(parsed_before, rest_inlines),
+                    final_remaining_text,
+                  )
+                }
+              }
+            }
+            False -> {
+              // Nested context for different delimiter
+              let parsed_before_inlines = case string.length(before_text) > 0 {
+                True -> [Text(before_text)]
+                False -> []
+              }
+              let #(nested_inlines, remaining_after_nested) =
+                parse_inlines_recursive(
+                  after_delimiter_text,
+                  option.Some(delimiter_type),
+                )
+              let new_inline = case delimiter_type {
+                BoldDelimiter -> Bold(nested_inlines)
+                ItalicDelimiter -> Italic(nested_inlines)
+              }
+              // Resume parsing with the current context, not as a new context
+              let #(rest_inlines, final_remaining_text) =
+                parse_inlines_recursive(
+                  remaining_after_nested,
+                  current_delimiter,
+                )
+              #(
+                list.append(
+                  list.append(parsed_before_inlines, [new_inline]),
+                  rest_inlines,
+                ),
+                final_remaining_text,
+              )
+            }
+          }
         }
-        _ -> {
-          // If this is an opening delimiter, search for the next matching closing delimiter
+        option.None -> {
+          // Not inside any context
+          let parsed_before_inlines = case string.length(before_text) > 0 {
+            True -> [Text(before_text)]
+            False -> []
+          }
+          // Check for a matching closing delimiter before recursing
           let closing_index_result =
             find_first_occurrence(after_delimiter_text, case delimiter_type {
               BoldDelimiter -> "**"
               ItalicDelimiter -> "*"
             })
           case closing_index_result {
-            Ok(closing_index) -> {
-              // Found a closing delimiter, parse inside as a block
-              let inside_text =
-                string.slice(after_delimiter_text, 0, closing_index)
-              let after_closing =
-                string.slice(
+            Ok(_) -> {
+              let #(nested_inlines, remaining_after_nested) =
+                parse_inlines_recursive(
                   after_delimiter_text,
-                  closing_index + delimiter_len,
-                  string.length(after_delimiter_text),
+                  option.Some(delimiter_type),
                 )
-              let parsed_before_inlines = case string.length(before_text) > 0 {
-                True -> [Text(before_text)]
-                False -> []
-              }
-              let parsed_inside =
-                parse_inlines_recursive(inside_text, option.None).0
               let new_inline = case delimiter_type {
-                BoldDelimiter -> Bold(parsed_inside)
-                ItalicDelimiter -> Italic(parsed_inside)
+                BoldDelimiter -> Bold(nested_inlines)
+                ItalicDelimiter -> Italic(nested_inlines)
               }
               let #(rest_inlines, final_remaining_text) =
-                parse_inlines_recursive(after_closing, current_delimiter)
+                parse_inlines_recursive(
+                  remaining_after_nested,
+                  current_delimiter,
+                )
               #(
                 list.append(
                   list.append(parsed_before_inlines, [new_inline]),
@@ -309,9 +356,13 @@ fn parse_inlines_recursive(
               )
             }
             Error(_) -> {
-              // No closing delimiter found, treat everything from this delimiter as plain text (including before_text)
-              let whole_text = string.slice(text, 0, string.length(text))
-              #([Text(whole_text)], "")
+              // No closing delimiter found, treat delimiter and rest as plain text
+              let delim = case delimiter_type {
+                BoldDelimiter -> "**"
+                ItalicDelimiter -> "*"
+              }
+              let as_text = before_text <> delim <> after_delimiter_text
+              #([Text(as_text)], "")
             }
           }
         }
