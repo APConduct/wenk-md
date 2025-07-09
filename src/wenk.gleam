@@ -23,6 +23,7 @@
 /// - `Block`: Represents a block-level Markdown element (see below)
 /// - `ParseState`: Internal state for block parsing
 /// - `RenderState`: Internal state for rendering ordered lists
+///
 /// # Limitations
 /// - Not all edge cases of the full Markdown spec are supported.
 /// - Only asterisks (`*`, `**`) are recognized for bold and italic (no underscores).
