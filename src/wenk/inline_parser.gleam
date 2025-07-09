@@ -1,6 +1,27 @@
 /// Markdown inline parser.
 /// Parses inline elements (bold, italic, text) from a string.
 /// Used internally by the main Markdown parser.
+///
+/// # Supported Inline Elements
+/// - **Bold**: Text wrapped in double asterisks (`**bold**`)
+/// - *Italic*: Text wrapped in single asterisks (`*italic*`)
+/// - Plain text: Any text not wrapped in delimiters
+///
+/// # Nesting
+/// Bold and italic can be nested inside each other, e.g. `**bold *italic***`.
+///
+/// # Limitations
+/// - Only asterisks (`*`, `**`) are supported as delimiters (no underscores).
+/// - Escaping delimiters is not supported.
+/// - Delimiters must be properly closed; unmatched delimiters are treated as plain text.
+///
+/// # Example
+/// ```gleam
+/// import wenk/inline_parser
+///
+/// let parsed = inline_parser.parse_inlines("Hello **world *foo***!")
+/// // Result: [Text("Hello "), Bold([Text("world "), Italic([Text("foo")])]), Text("!")]
+/// ```
 import gleam/int
 import gleam/list
 import gleam/option
@@ -17,11 +38,16 @@ pub type Inline {
   Italic(List(Inline))
 }
 
+/// Internal type representing the kind of delimiter found.
 type DelimiterType {
+  /// Bold delimiter: `**`
   BoldDelimiter
+  /// Italic delimiter: `*`
   ItalicDelimiter
 }
 
+/// Find the first occurrence of a substring in a string.
+/// Returns `Ok(index)` if found, or `Error(Nil)` if not found.
 fn find_first_occurrence(text: String, sub: String) -> Result(Int, Nil) {
   let text_length = string.length(text)
   let sub_length = string.length(sub)
@@ -41,6 +67,7 @@ fn find_first_occurrence(text: String, sub: String) -> Result(Int, Nil) {
   }
 }
 
+/// Helper for `find_first_occurrence`, recursively searches for the substring.
 fn find_first_occurrence_recursive(
   text: String,
   sub: String,
@@ -60,6 +87,8 @@ fn find_first_occurrence_recursive(
   }
 }
 
+/// Finds the next delimiter (`**` or `*`) in the text.
+/// Returns the delimiter type and its index, or `Error(Nil)` if none found.
 fn find_next_delimiter(text: String) -> Result(#(DelimiterType, Int), Nil) {
   let bold_occurrence = find_first_occurrence(text, "**")
   let italic_occurrence = find_first_occurrence(text, "*")
@@ -77,6 +106,7 @@ fn find_next_delimiter(text: String) -> Result(#(DelimiterType, Int), Nil) {
   }
 }
 
+/// Returns the length of the delimiter: 2 for bold, 1 for italic.
 fn delimiter_length(delimiter_type: DelimiterType) -> Int {
   case delimiter_type {
     BoldDelimiter -> 2
@@ -85,11 +115,22 @@ fn delimiter_length(delimiter_type: DelimiterType) -> Int {
 }
 
 /// Parse a string into a list of inline elements (text, bold, italic).
+/// Returns a list of `Inline` elements representing the parsed structure.
+///
+/// # Example
+/// ```gleam
+/// parse_inlines("**bold** and *italic* text")
+/// // => [Bold([Text("bold")]), Text(" and "), Italic([Text("italic")]), Text(" text")]
+/// ```
 pub fn parse_inlines(text: String) -> List(Inline) {
   let #(inlines, _) = parse_inlines_recursive(text, option.None)
   inlines
 }
 
+/// Internal recursive parser for inline elements.
+/// - `text`: the input string to parse
+/// - `current_delimiter`: the delimiter context (if inside bold/italic)
+/// Returns a tuple: (parsed inlines, remaining text after closing delimiter)
 fn parse_inlines_recursive(
   text: String,
   current_delimiter: option.Option(DelimiterType),

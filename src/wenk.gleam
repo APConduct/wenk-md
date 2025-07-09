@@ -1,13 +1,34 @@
 /// Markdown block parser and renderer.
-/// Provides functions to parse Markdown text into block elements and render them as HTML.
-/// Delegates inline parsing to `wenk/inline_parser`.
 ///
-/// Example:
+/// This module provides functions to parse Markdown text into block elements and render them as HTML.
+/// It supports headings, paragraphs, unordered and ordered lists, and fenced code blocks.
+/// Inline parsing (for bold, italic, etc.) is delegated to `wenk/inline_parser`.
+///
+/// # Example
 /// ```gleam
 /// import wenk
 /// let blocks = wenk.parse("# Hello, *world*!\\nThis is **Markdown**.")
 /// let html = wenk.render(blocks)
 /// ```
+///
+/// # Supported Markdown Features
+/// - Headings: Lines starting with one or more `#` characters (e.g., `# Heading 1`)
+/// - Paragraphs: Any non-empty line not matching another block type
+/// - Unordered Lists: Lines starting with `* `, `- `, or `+ `
+/// - Ordered Lists: Lines starting with a number and `. ` (e.g., `1. Item`)
+/// - Fenced Code Blocks: Lines surrounded by triple backticks (```), content is not parsed for inlines
+/// - Inline formatting: Bold (`**bold**`), Italic (`*italic*`), etc. via `wenk/inline_parser`
+///
+/// # Types
+/// - `Block`: Represents a block-level Markdown element (see below)
+/// - `ParseState`: Internal state for block parsing
+/// - `RenderState`: Internal state for rendering ordered lists
+/// # Limitations
+/// - Not all edge cases of the full Markdown spec are supported.
+/// - Only asterisks (`*`, `**`) are recognized for bold and italic (no underscores).
+/// - Inline escaping (e.g., `\\*`) is not supported.
+/// - No support for blockquotes, links, images, or code spans (yet).
+/// - Heading levels above 6 are not limited and will render as `<hN>`.
 import gleam/int
 import gleam/list
 import gleam/order.{Eq, Gt, Lt}
@@ -29,11 +50,24 @@ pub type Block {
 }
 
 /// Parse a Markdown string into a list of block elements.
+///
+/// Splits the input string into lines and parses each line into a block element.
+/// Returns a list of `Block` values representing the Markdown structure.
+///
+/// # Example
+/// ```gleam
+/// let blocks = wenk.parse("# Title\\nSome text")
+/// ```
 pub fn parse(text: String) -> List(Block) {
   let lines = string.split(text, "\n")
   parse_blocks_recursive(lines, [], Normal)
 }
 
+/// Recursively parses lines of Markdown into blocks.
+///
+/// - Handles code blocks using the `ParseState`.
+/// - Ignores empty lines.
+/// - Delegates line parsing to `parse_line`.
 fn parse_blocks_recursive(
   lines: List(String),
   acc: List(Block),
@@ -91,17 +125,33 @@ fn parse_blocks_recursive(
   }
 }
 
+/// Internal state for parsing blocks.
 type ParseState {
+  /// Not currently in a code block.
   Normal
+  /// Currently inside a code block, accumulating lines.
   InCodeBlock(List(String))
 }
 
 /// Render a list of block elements as an HTML string.
+///
+/// Wraps ordered lists in `<ol>` tags as needed.
+/// Returns the HTML string for the entire Markdown document.
+///
+/// # Example
+/// ```gleam
+/// let html = wenk.render([wenk.Heading(1, [wenk.inline_parser.Text("Title")])])
+/// // html == "<h1>Title</h1>"
+/// ```
 pub fn render(blocks: List(Block)) -> String {
   render_blocks_recursive(blocks, [], NotInOrderedList)
   |> string.join("")
 }
 
+/// Recursively renders blocks to HTML, handling ordered list state.
+///
+/// - Opens and closes `<ol>` tags as needed.
+/// - Delegates block rendering to `render_block`.
 fn render_blocks_recursive(
   blocks: List(Block),
   acc: List(String),
@@ -145,11 +195,18 @@ fn render_blocks_recursive(
   }
 }
 
+/// Internal state for rendering ordered lists.
 type RenderState {
+  /// Currently inside an ordered list.
   InOrderedList
+  /// Not inside an ordered list.
   NotInOrderedList
 }
 
+/// Render a single inline element as HTML.
+///
+/// Delegates to the appropriate HTML tag for bold and italic.
+/// Returns the HTML string for the inline element.
 pub fn render_inline(inline: inline_parser.Inline) -> String {
   case inline {
     inline_parser.Text(text) -> text
@@ -163,6 +220,12 @@ pub fn render_inline(inline: inline_parser.Inline) -> String {
 }
 
 /// Render a single block as HTML.
+///
+/// - Paragraphs are wrapped in `<p>`.
+/// - Headings use `<h1>` to `<h6>`.
+/// - List items use `<li>`.
+/// - Code blocks use `<pre><code>`.
+/// - Delegates inline rendering to `render_inline`.
 pub fn render_block(block: Block) -> String {
   case block {
     Paragraph(inlines) ->
@@ -183,7 +246,14 @@ pub fn render_block(block: Block) -> String {
   }
 }
 
-/// Render a single inline element as HTML.
+/// Parse a single line of Markdown into a block element.
+///
+/// - Headings: Lines starting with `#` (level determined by number of `#`)
+/// - Unordered lists: Lines starting with `* `, `- `, or `+ `
+/// - Ordered lists: Lines starting with a number and `. `
+/// - Otherwise, treated as a paragraph.
+///
+/// Delegates inline parsing to `wenk/inline_parser`.
 pub fn parse_line(line: String) -> Block {
   case string.starts_with(line, "#") {
     True -> {
@@ -219,6 +289,9 @@ pub fn parse_line(line: String) -> Block {
   }
 }
 
+/// Helper to determine the heading level by counting leading `#` characters.
+///
+/// Returns the number of `#` at the start of the line.
 fn get_heading_level(line: String, level: Int) -> Int {
   case int.compare(string.length(line), level) {
     Gt -> {
